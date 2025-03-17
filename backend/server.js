@@ -43,10 +43,23 @@ if (!fs.existsSync(staticDir)) {
   }
 }
 
+// Helper function to get all videos from database
+function getAllVideos() {
+  return new Promise((resolve, reject) => {
+    db.all("SELECT * FROM videos", [], (err, videos) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(videos);
+    });
+  });
+}
+
 // Add HLS manifest URLs to your video objects
 app.get('/videos', async (req, res) => {
   try {
-    const videos = await getAllVideos(); // Your existing function
+    const videos = await getAllVideos(); 
     
     // Add HLS URLs to each video
     const videosWithHls = videos.map(video => {
@@ -77,7 +90,9 @@ db.serialize(() => {
     title TEXT NOT NULL,
     url TEXT NOT NULL,
     filename TEXT,
-    hlsUrl TEXT
+    hlsUrl TEXT,
+    views INTEGER DEFAULT 0,
+    last_viewed TIMESTAMP
   )`, (err) => {
     if (err) {
       console.error("Error creating table:", err.message);
@@ -86,7 +101,7 @@ db.serialize(() => {
     console.log("Videos table ready");
   });
 
-  // Then check if we need to add the filename column
+  // Then check if we need to add new columns
   db.get("PRAGMA table_info(videos)", [], (err, tableInfo) => {
     if (err) {
       console.error("Error checking table structure:", err);
@@ -103,6 +118,18 @@ db.serialize(() => {
     db.run("ALTER TABLE videos ADD COLUMN hlsUrl TEXT DEFAULT NULL", err => {
       if (err && !err.message.includes('duplicate column')) {
         console.error("Error adding hlsUrl column:", err);
+      }
+    });
+
+    db.run("ALTER TABLE videos ADD COLUMN views INTEGER DEFAULT 0", err => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error("Error adding views column:", err);
+      }
+    });
+
+    db.run("ALTER TABLE videos ADD COLUMN last_viewed TIMESTAMP", err => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error("Error adding last_viewed column:", err);
       }
     });
 
@@ -207,10 +234,16 @@ function populateVideosFromDirectory() {
 app.get('/api/thumbnail/:filename', (req, res) => {
   const filename = req.params.filename;
   const videoPath = path.join(__dirname, 'videos', filename);
+  const thumbnailPath = path.join(thumbnailsDir, `${path.basename(filename, path.extname(filename))}.jpg`);
   
   // If video doesn't exist, return 404
   if (!fs.existsSync(videoPath)) {
     return res.status(404).send('Video not found');
+  }
+  
+  // If thumbnail already exists, return it
+  if (fs.existsSync(thumbnailPath)) {
+    return res.json({ thumbnailUrl: `/thumbnails/${path.basename(thumbnailPath)}` });
   }
   
   // Return a URL that the client will use to generate a thumbnail with HTML5 Video
@@ -219,13 +252,93 @@ app.get('/api/thumbnail/:filename', (req, res) => {
 
 // API route to get all videos
 app.get("/api/videos", (req, res) => {
-  db.all("SELECT id, COALESCE(filename, '') as filename FROM videos", [], (err, existingVideos) => {
+  db.all("SELECT * FROM videos", [], async (err, videos) => {
     if (err) {
-      console.error("Error fetching existing videos:", err);
-      return;
+      console.error("Error fetching videos:", err);
+      return res.status(500).json({ error: 'Failed to fetch videos' });
     }
     
-    res.json(existingVideos);
+    // Instead of HLS URLs (which don't exist yet), provide direct MP4 URLs
+    const processedVideos = videos.map(video => {
+      return {
+        ...video,
+        // Keep the direct mp4 URL as the main source
+        directUrl: video.url,
+        // Set a flag to indicate we're using direct playback instead of HLS
+        useDirectPlayback: true,
+        // We'll keep the HLS properties but mark them as not available
+        hlsAvailable: false
+      };
+    });
+    
+    res.json(processedVideos);
+  });
+});
+
+// Record video view statistics
+app.post("/api/videos/:id/view", (req, res) => {
+  const videoId = req.params.id;
+  
+  db.run(
+    "UPDATE videos SET views = views + 1, last_viewed = CURRENT_TIMESTAMP WHERE id = ?",
+    [videoId],
+    function(err) {
+      if (err) {
+        console.error("Error updating view count:", err);
+        return res.status(500).json({ error: "Failed to update view count" });
+      }
+      
+      if (this.changes === 0) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+      
+      res.json({ success: true, message: "View recorded" });
+    }
+  );
+});
+
+// Get video statistics
+app.get("/api/statistics", (req, res) => {
+  db.all(
+    "SELECT id, title, views, last_viewed FROM videos ORDER BY views DESC", 
+    [],
+    (err, videos) => {
+      if (err) {
+        console.error("Error fetching video statistics:", err);
+        return res.status(500).json({ error: "Failed to fetch statistics" });
+      }
+      
+      const stats = {
+        mostViewed: videos.slice(0, 5),
+        recentlyViewed: [...videos].sort((a, b) => {
+          if (!a.last_viewed) return 1;
+          if (!b.last_viewed) return -1;
+          return new Date(b.last_viewed) - new Date(a.last_viewed);
+        }).slice(0, 5),
+        totalViews: videos.reduce((sum, video) => sum + (video.views || 0), 0)
+      };
+      
+      res.json(stats);
+    }
+  );
+});
+
+// Fallback route for HLS requests - this will inform the client that HLS isn't available
+app.get('/api/videos/hls/:filename/master.m3u8', (req, res) => {
+  const filename = req.params.filename;
+  
+  // Find the original video from the database
+  db.get("SELECT * FROM videos WHERE filename LIKE ?", [`%${filename}%`], (err, video) => {
+    if (err || !video) {
+      console.error("Error fetching video for HLS:", err);
+      return res.status(404).json({ 
+        error: 'HLS stream not found',
+        message: 'HLS streaming is not available for this video'
+      });
+    }
+    
+    // Redirect to the direct MP4 URL instead
+    res.redirect(video.url);
   });
 });
 
@@ -242,5 +355,35 @@ app.get('/api/bitrateInfo', (req, res) => {
       defaultBitrate: 'auto'
     });
   });
+
+// Export video metadata in JSON format
+app.get('/api/export/metadata', async (req, res) => {
+  try {
+    const videos = await getAllVideos();
+    res.json(videos);
+  } catch (error) {
+    console.error("Error exporting metadata:", error);
+    res.status(500).json({ error: "Failed to export metadata" });
+  }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'up',
+    database: true,
+    videoCount: 0 // Will be populated in the next middleware
+  });
+});
+
+// Middleware to count videos
+app.use('/api/health', (req, res, next) => {
+  db.get("SELECT COUNT(*) as count FROM videos", [], (err, row) => {
+    if (!err && res.locals.responseBody) {
+      res.locals.responseBody.videoCount = row.count;
+    }
+    next();
+  });
+});
 
 app.listen(5000, () => console.log("Backend running on port 5000"));
