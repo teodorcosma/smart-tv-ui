@@ -54,10 +54,20 @@ const TestStatsOverlay: React.FC = () => {
       {/* Controls */}
       <div className="absolute bottom-4 left-4 z-10">
         <button 
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-4"
           onClick={() => setShowStats(!showStats)}
         >
           {showStats ? 'Hide Stats' : 'Show Stats'}
+        </button>
+        <button
+          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+          onClick={() => {
+            const effectiveTypes = ['2g', '3g', '4g', '5g', 'wifi'];
+            const randomType = effectiveTypes[Math.floor(Math.random() * effectiveTypes.length)];
+            setNetworkInfo({ ...networkInfo, effectiveType: randomType });
+          }}
+        >
+          Simulate Network Change
         </button>
       </div>
 

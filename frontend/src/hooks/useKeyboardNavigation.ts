@@ -1,19 +1,16 @@
 import { useEffect } from 'react';
-// Update imports to use relative paths
 import { Video } from '../types';
 
-interface KeyboardNavigationProps {
+interface UseKeyboardNavigationProps {
   focusedIndex: number;
   videosLength: number;
   isPlaying: boolean;
   isFullscreen: boolean;
-  showStats: boolean;
   videos: Video[];
   setFocusedIndex: (index: number) => void;
   togglePlay: () => void;
   seekVideo: (seconds: number) => void;
   toggleFullscreen: (enter: boolean) => void;
-  setShowStats: (show: boolean) => void;
   setSelectedVideo: (video: Video) => void;
   setCurrentTime: (time: number) => void;
 }
@@ -23,50 +20,45 @@ export function useKeyboardNavigation({
   videosLength,
   isPlaying,
   isFullscreen,
-  showStats,
   videos,
   setFocusedIndex,
   togglePlay,
   seekVideo,
   toggleFullscreen,
-  setShowStats,
   setSelectedVideo,
-  setCurrentTime,
-}: KeyboardNavigationProps) {
+  setCurrentTime
+}: UseKeyboardNavigationProps) {
   useEffect(() => {
-    // Set up keyboard event listener for the entire document
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isFullscreen) {
+      // If in fullscreen or playing mode, handle playback controls
+      if (isFullscreen || isPlaying) {
         switch (e.key) {
+          case "f":
+            e.preventDefault();
+            toggleFullscreen(true);
+            break;
           case "Escape":
-          case "Backspace":
             e.preventDefault();
             toggleFullscreen(false);
             break;
-          case "k": // k for play/pause (like YouTube)
+          case "k":
+          case " ":
             e.preventDefault();
             togglePlay();
             break;
-          case "l": // l for forward 10 seconds (like YouTube)
+          case "l":
             e.preventDefault();
             seekVideo(10);
             break;
-          case "j": // j for backward 10 seconds (like YouTube)
+          case "j":
             e.preventDefault();
             seekVideo(-10);
-            break;
-          case " ": // Space bar also for play/pause
-            e.preventDefault();
-            togglePlay();
-            break;
-          case "s": // Toggle stats
-            e.preventDefault();
-            setShowStats(!showStats);
             break;
         }
         return;
       }
-
+      
+      // If not in playback mode, handle navigation
       switch (e.key) {
         case "ArrowUp":
           e.preventDefault();
@@ -80,36 +72,16 @@ export function useKeyboardNavigation({
             setFocusedIndex(focusedIndex + 1);
           }
           break;
-        case "Enter": // Change to only select the video, not go fullscreen
+        case "Enter":
           e.preventDefault();
           if (videos[focusedIndex]) {
             setSelectedVideo(videos[focusedIndex]);
             setCurrentTime(0); // Reset time when changing videos
           }
           break;
-        case "f": // f key for fullscreen
+        case "f":
           e.preventDefault();
           toggleFullscreen(true);
-          break;
-        case "k": // k for play/pause in the main view too
-          e.preventDefault();
-          togglePlay();
-          break;
-        case "l": // l for forward 10 seconds
-          e.preventDefault();
-          seekVideo(10);
-          break;
-        case "j": // j for backward 10 seconds
-          e.preventDefault();
-          seekVideo(-10);
-          break;
-        case " ": // Space bar for play/pause
-          e.preventDefault();
-          togglePlay();
-          break;
-        case "s": // Toggle stats
-          e.preventDefault();
-          setShowStats(!showStats);
           break;
       }
     };
@@ -117,17 +89,15 @@ export function useKeyboardNavigation({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [
-    focusedIndex, 
-    videosLength, 
-    isPlaying, 
-    isFullscreen, 
-    showStats,
+    focusedIndex,
+    videosLength,
+    isPlaying,
+    isFullscreen,
     videos,
     setFocusedIndex,
     togglePlay,
     seekVideo,
     toggleFullscreen,
-    setShowStats,
     setSelectedVideo,
     setCurrentTime
   ]);

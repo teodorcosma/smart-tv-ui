@@ -1,5 +1,4 @@
 import React, { MutableRefObject } from 'react';
-// Update imports to use relative paths
 import { Video } from '../types';
 import VideoThumbnail from './VideoThumbnail';
 

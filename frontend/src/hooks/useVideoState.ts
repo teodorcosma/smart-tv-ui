@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback } from 'react';
-// Update imports to use relative paths
 import { Video, PlayerEvent } from '../types';
 
 export function useVideoState() {
@@ -9,15 +8,13 @@ export function useVideoState() {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [selectedQuality, setSelectedQuality] = useState<string>("auto");
   const [currentTime, setCurrentTime] = useState(0);
-  const [showStats, setShowStats] = useState(false);
 
   // Refs
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
   const playerRef = useRef<HTMLVideoElement | null>(null);
 
-  // Function to handle player events including seeking
+  // Function to handle player events
   const handlePlayerReady = useCallback(({ player, event }: PlayerEvent) => {
     playerRef.current = player;
     
@@ -45,26 +42,16 @@ export function useVideoState() {
     }
   }, []);
 
-  // This function handles the quality change
-  const handleQualityChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newQuality = e.target.value;
-    setSelectedQuality(newQuality);
-    console.log(`Quality changed to: ${newQuality}`);
-  }, []);
-
-  // Toggle play/pause with debouncing to prevent rapid toggling
+  // Toggle play/pause
   const togglePlay = useCallback(() => {
     if (!playerRef.current) return;
-    
     if (isPlaying) {
       playerRef.current.pause();
     } else {
       const playPromise = playerRef.current.play();
       if (playPromise) {
-        playPromise.catch(e => {
-          if (process.env.NODE_ENV === 'development') {
-            console.error("Play failed:", e);
-          }
+        playPromise.catch((e) => {
+          console.error("Play failed:", e);
         });
       }
     }
@@ -83,10 +70,8 @@ export function useVideoState() {
         // Short timeout to ensure the new player is mounted
         setTimeout(() => {
           if (playerRef.current) {
-            playerRef.current.play().catch(e => {
-              if (process.env.NODE_ENV === 'development') {
-                console.error("Fullscreen play failed:", e);
-              }
+            playerRef.current.play().catch((e) => {
+              console.error("Fullscreen play failed:", e);
             });
           }
         }, 200);
@@ -97,12 +82,16 @@ export function useVideoState() {
   // Native fullscreen API
   const enterNativeFullscreen = useCallback(() => {
     if (playerRef.current && playerRef.current.requestFullscreen) {
-      playerRef.current.requestFullscreen().catch(e => {
-        if (process.env.NODE_ENV === 'development') {
-          console.error("Fullscreen request failed:", e);
-        }
+      playerRef.current.requestFullscreen().catch((e) => {
+        console.error("Fullscreen request failed:", e);
       });
     }
+  }, []);
+
+  // Function to get video source - simplified to return the direct URL
+  const getVideoSource = useCallback((url: string): string | null => {
+    if (!url) return null;
+    return url;
   }, []);
 
   return {
@@ -112,9 +101,7 @@ export function useVideoState() {
     focusedIndex,
     isPlaying,
     isFullscreen,
-    selectedQuality,
     currentTime,
-    showStats,
     playerRef,
     videoRefs,
     
@@ -124,16 +111,14 @@ export function useVideoState() {
     setFocusedIndex,
     setIsPlaying,
     setIsFullscreen,
-    setSelectedQuality,
     setCurrentTime,
-    setShowStats,
     
     // Actions
     togglePlay,
     seekVideo,
     toggleFullscreen,
     enterNativeFullscreen,
-    handleQualityChange,
     handlePlayerReady,
+    getVideoSource
   };
 }

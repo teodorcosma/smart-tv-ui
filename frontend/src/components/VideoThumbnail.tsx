@@ -11,6 +11,16 @@ const VideoThumbnail: React.FC<VideoThumbnailProps> = ({ src }) => {
     // Load the video and pause it at the first frame
     const video = videoRef.current;
     if (video && src) {
+      // Reset the video element
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+
+      // Set the new source
+      video.src = src;
+      video.muted = true;
+      video.preload = 'metadata';
+
       // Set a small currentTime to ensure we get the first frame not a black screen
       video.currentTime = 0.1;
       // Some browsers need this for the currentTime to take effect
@@ -28,10 +38,7 @@ const VideoThumbnail: React.FC<VideoThumbnailProps> = ({ src }) => {
     <video 
       ref={videoRef}
       className="w-full h-full object-cover"
-      src={src}
       preload="metadata"
-      muted
-      playsInline
     />
   );
 };
